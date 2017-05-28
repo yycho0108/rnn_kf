@@ -79,6 +79,35 @@ class GenerateData_v2(object):
 
             yield i, label, data, len
 
+class GenerateData_v3(GenerateData_v2):
+    def __init__(self, max_seq_len=20, min_seq_len=3, noise=5e-2, frame_size=(480,640), ball_size=20):
+        super(GenerateData_v3, self).__init__(max_seq_len, min_seq_len, noise)
+        self._frame_size = frame_size
+        self._ball_size = ball_size
+    def ball_frame(self, pos):
+        frame = np.random.random_sample(size = self._frame_size)
+        #frame = np.zeros(np.float32, shape = self._frame_size)
+        cv2.circle(frame, tuple(int(e) for e in pos), self._ball_size, 1.0, thickness=-1)
+        return frame
+    def get(self, batch_size=1, num_steps=1, final_label=True):
+        for (i, label, data, len) in GenerateData_v2.get(self, batch_size, num_steps, final_label):
+            # data = [batch_size, seq_len, pos]
+            #data = data.reshape(-1,2)
+            #print data.shape
+            b, l, _ = data.shape
+            w,h = self._frame_size
+
+            data_r = np.random.random_sample(size = (b, l, w, h))
+
+            for idx in np.ndindex(b,l):
+                pos = tuple(int(e) for e in [w/2. * (data[idx][0]+1) , h/2. * (data[idx][1]+1)])
+                cv2.circle(data_r[idx], pos, self._ball_size, 1.0, thickness=-1)
+
+            #data = np.apply_along_axis(meh, 2, data)
+            # data = [batch_size, seq_len, (w,h)]
+            yield i, label, data_r, len
+
+
 def main():
     gen = GenerateData_v2(200,100,5e-2)
     w = 640
@@ -104,8 +133,19 @@ def main():
 
             cv2.waitKey(0)
 
+def main_v3():
+    gen = GenerateData_v3(200,100,5e-2)
+    for i, lab_b, dat_b, len_b in gen.get(batch_size=3, num_steps = 1):
+        for lab_s, dat_s, len_s in zip(lab_b, dat_b, len_b): # seq_len ...
+            for dat in dat_s:
+                cv2.imshow('frame', dat)
+                k = cv2.waitKey(20)
+                if k == 27 or k == ord('q'):
+                    return
+
+
 if __name__ == "__main__":
-    main()
+    main_v3()
 
     #gen = GenerateData()
     #gen.start()
