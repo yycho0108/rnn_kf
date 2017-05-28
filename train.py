@@ -67,7 +67,7 @@ def net(x,l):
     #o = tf.tanh(o)
     #o = tf.nn.relu(o)
 
-    o = slim.fully_connected(o, n_hidden, activation_fn=tf.nn.relu, scope='fc/fc1')
+    #o = slim.fully_connected(o, n_hidden, activation_fn=tf.nn.relu, scope='fc/fc1')
     o = slim.fully_connected(o, 2, activation_fn=tf.tanh, scope='fc/fc2')
 
     #h = slim.fully_connected(outputs, n_hidden, scope='fc/fc1')
