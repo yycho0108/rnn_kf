@@ -33,12 +33,12 @@ class GenerateData(object):
 
     def track(self, event, x, y, flags, param):
         if event == cv2.EVENT_MOUSEMOVE:
-            h,w = self.shape
+            h,w,_ = self.shape
             h,w = float(h), float(w)
             n_x = float(x) / (w/2) - 1 # -1 ~ 1
             n_y = float(y) / (h/2) - 1 # -1 ~ 1
             self.pos.append(5e-2 * np.random.randn(2) + [n_x,n_y])
-            cv2.circle(self.frame, (x,y), 3, 255)
+            cv2.circle(self.frame, (x,y), 3, (0,0,255))
 
 def create_graph():
     """Creates a graph from saved GraphDef file and returns a saver."""
@@ -75,12 +75,18 @@ def main():
                 'x:0' : x,
                 'l:0' : np.array([l])
                 })[0]
-            h,w = frame.shape
+            h,w,_ = frame.shape
+
             y *= [w/2,h/2]
             y += [w/2,h/2]
-            cv2.circle(frame, tuple(int(e) for e in y), 3, 128, thickness=-1)
 
-        gen = GenerateData()
+            est = pos[-1] + 1
+            est *= [w/2, h/2]
+
+            cv2.circle(frame, tuple(int(e) for e in est), 5, (255,0,0), thickness=-1)
+            cv2.circle(frame, tuple(int(e) for e in y), 3, (0,255,0), thickness=-1)
+
+        gen = GenerateData(shape=(480,640,3))
         gen.start(run)
 
 if __name__ == "__main__":
