@@ -5,7 +5,8 @@ import cv2
 import os
 import tensorflow as tf
 
-class GenerateData(object):
+from train_cont import net
+class GameRun(object):
     def __init__(self, name='', shape=(480,640)):
         if len(name) <= 0:
             name = 'frame'
@@ -26,6 +27,9 @@ class GenerateData(object):
             cv2.imshow(self.name, self.frame)
             k = cv2.waitKey(20)
 
+            if len(self.pos) > 0:
+                self.est.append(5e-2 * np.random.randn(2) + self.pos[-1])
+
             callback(self.frame, self.pos, self.est)
 
             if k == 27 or k == ord('q'):
@@ -39,7 +43,6 @@ class GenerateData(object):
             n_y = float(y) / (h/2) - 1 # -1 ~ 1
             pos = np.array([n_x,n_y])
             self.pos.append(pos)
-            self.est.append(5e-2 * np.random.randn(2) + pos)
 
 def create_graph():
     """Creates a graph from saved GraphDef file and returns a saver."""
@@ -48,6 +51,7 @@ def create_graph():
         graph_def = tf.GraphDef()
         graph_def.ParseFromString(f.read())
         _ = tf.import_graph_def(graph_def, name='')
+
 
 def report_graph(graph):
   for op in graph.get_operations():
@@ -67,33 +71,49 @@ def draw_pt(frame, pt, w, h, sz, col, t):
     cv2.circle(frame, pt, sz, col, thickness=t)
 
 def main():
+    global dm,de
 
     create_graph()
-    with tf.Session() as sess:
-        report_graph(sess.graph)
-        pred = sess.graph.get_tensor_by_name('prediction:0')
 
+    with tf.Session() as sess:
+        
+        report_graph(sess.graph)
+
+        #with tf.variable_scope('model', reuse=True):
+        #    test = {}
+        #    test['pred'], test['reset'], test['update'] = net(x, 1, True)
+
+        x = sess.graph.get_tensor_by_name('x:0')
+        pred = sess.graph.get_tensor_by_name('model_1/pred:0')
+        #print pred.shape
+
+        dm = 0.0
+        de = 0.0
 
         def run(frame, pos, est):
-            l = np.random.randint(199,200)
+            global dm,de
 
             h,w,_ = frame.shape
 
-            if len(pos) > l:
-                x = np.reshape(np.array(est[-l:]),[1,l,2])
+            if len(est) > 128:
+                x = np.reshape(np.array(est),[1,-1,2])
                 y = sess.run(pred,feed_dict={
                     'x:0' : x,
-                    'l:0' : np.array([l])
                     })[0]
 
                 draw_pt(frame, y, w, h, 3, (255,0,0), -1)
+
+                dm += np.linalg.norm(pos[-1] - est[-1])
+                de += np.linalg.norm(pos[-1] - y)
+                print 'dm,de', dm,de
+
 
             if len(pos) > 1:
                 draw_pt(frame, est[-1], w, h, 5, (0,255,0), -1)
                 draw_pt(frame, pos[-1], w, h, 3, (0,0,255), -1)
 
-        gen = GenerateData(shape=(480,640,3))
-        gen.start(run)
+        game = GameRun(shape=(480,640,3))
+        game.start(run)
 
 if __name__ == "__main__":
     main()
