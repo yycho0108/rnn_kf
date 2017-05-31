@@ -7,3 +7,7 @@ Simulating a Kalman Filter with Stateful LSTMs
 Blue : Ground Truth
 Green : Noisy Measurement
 Red : Estimated Position
+
+![Error](images/fig.png)
+
+Error Comparison

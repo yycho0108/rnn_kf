@@ -133,14 +133,17 @@ def main():
         if load_ckpt:
             saver.restore(sess, ckpt_path)
 
-        if not os.path.exists(log_root):
-            os.makedirs(log_root)
-        run_id = len(os.walk('/tmp/localize_logs/').next()[1])
-        writer = tf.summary.FileWriter(os.path.join('/tmp/localize_logs/', ('run_%02d' % run_id)) , graph)
-
-        merged = tf.summary.merge_all()
-
+        ##  TRAIN  ##
         if do_train:
+
+            ## LOGGING ##
+            if not os.path.exists(log_root):
+                os.makedirs(log_root)
+            run_id = len(os.walk('/tmp/localize_logs/').next()[1])
+            writer = tf.summary.FileWriter(os.path.join('/tmp/localize_logs/', ('run_%02d' % run_id)) , graph)
+            merged = tf.summary.merge_all()
+            #############
+
             for step, label, data in g.get(batch_size, training_iters):
                 _ = sess.run(train['reset'])
                 for x_in, y_in in zip(data, label):
@@ -155,6 +158,7 @@ def main():
                     #print('real :' , label[-1])
                     #print('pred :' , prediction[-1])
             saver.save(sess, ckpt_path)
+        ############
 
         ##  SAVE  ##
         output_graph_def = graph_util.convert_variables_to_constants(
@@ -176,6 +180,8 @@ def main():
                 prvx = None
                 prvy = None
                 prvp = None
+                err_m = 0
+                err_p = 0
 
                 for x_in, y_in in zip(data, label):
                     feed_dict = {x : x_in[:, np.newaxis,:], y : y_in[:, np.newaxis, :]}
@@ -187,12 +193,15 @@ def main():
                     x_pt = (x_in[1], x_in[0])
                     p_pt = (pred[1], pred[0])
 
+                    err_m += np.linalg.norm(y_in - x_in)
+                    err_p += np.linalg.norm(y_in - pred)
+
                     cv2.circle(frame, y_pt, 5, (255,0,0), thickness=-1) # --> true pos, blue
                     cv2.circle(frame, x_pt, 4, (0,255,0), thickness= 1) # --> measured pos, green
                     cv2.circle(frame, p_pt, 4, (0,0,255), thickness= 1) # --> predicted pos, reg
 
                     if prvx is not None:
-                        cv2.line(frame, prvy, y_pt, (255,0,0), 2)
+                        cv2.line(frame, prvy, y_pt, (255,0,0), 1)
                         cv2.line(frame, prvx, x_pt, (0,255,0), 1)
                         cv2.line(frame, prvp, p_pt, (0,0,255), 1)
 
@@ -203,6 +212,7 @@ def main():
                     cv2.imshow('frame', frame)
                     if cv2.waitKey(20) == 27:
                         break
+                print('err_m : %.2f ; err_p : %.2f' % (err_m, err_p))
                 if cv2.waitKey(0) == 27:
                     break
         #############
@@ -211,47 +221,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-#pred = dynamicRNN(x, seqlen, weights, biases)
-#
-## Define loss and optimizer
-#cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
-#optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(cost)
-#
-## Evaluate model
-#correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(y,1))
-#accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-#
-## Initializing the variables
-#init = tf.global_variables_initializer()
-#
-## Launch the graph
-#with tf.Session() as sess:
-#    sess.run(init)
-#    step = 1
-#    # Keep training until reach max iterations
-#    while step * batch_size < training_iters:
-#        batch_x, batch_y, batch_seqlen = trainset.next(batch_size)
-#        # Run optimization op (backprop)
-#        sess.run(optimizer, feed_dict={x: batch_x, y: batch_y,
-#                                       seqlen: batch_seqlen})
-#        if step % display_step == 0:
-#            # Calculate batch accuracy
-#            acc = sess.run(accuracy, feed_dict={x: batch_x, y: batch_y,
-#                                                seqlen: batch_seqlen})
-#            # Calculate batch loss
-#            loss = sess.run(cost, feed_dict={x: batch_x, y: batch_y,
-#                                             seqlen: batch_seqlen})
-#            print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
-#                  "{:.6f}".format(loss) + ", Training Accuracy= " + \
-#                  "{:.5f}".format(acc))
-#        step += 1
-#    print("Optimization Finished!")
-#
-#    # Calculate accuracy
-#    test_data = testset.data
-#    test_label = testset.labels
-#    test_seqlen = testset.seqlen
-#    print("Testing Accuracy:", \
-#        sess.run(accuracy, feed_dict={x: test_data, y: test_label,
-#                                      seqlen: test_seqlen}))
