@@ -27,11 +27,15 @@ testing_iters = 10
 batch_size = 128
 display_step = 10
 
-do_train = True
+load_ckpt = True 
+log_root = '/tmp/localize_logs/'
+ckpt_path='data/model.ckpt'
+
+do_train = False 
 do_test = True
 
 # Network Parameters
-seq_len = 200 # Sequence length
+seq_len = 200 # Observation Sequence length
 
 n_hidden = 64 # hidden layer num of features
 
@@ -122,28 +126,35 @@ def main():
     g = gen(seq_len = seq_len, noise=4e-2)
 
     with tf.Session(graph=graph) as sess:
+        saver = tf.train.Saver()
+
         sess.run(init)
 
-        merged = tf.summary.merge_all()
-        log_root = '/tmp/localize_logs/'
+        if load_ckpt:
+            saver.restore(sess, ckpt_path)
+
         if not os.path.exists(log_root):
             os.makedirs(log_root)
         run_id = len(os.walk('/tmp/localize_logs/').next()[1])
         writer = tf.summary.FileWriter(os.path.join('/tmp/localize_logs/', ('run_%02d' % run_id)) , graph)
 
-        for step, label, data in g.get(batch_size, training_iters):
-            _ = sess.run(train['reset'])
-            for x_in, y_in in zip(data, label):
-                feed_dict = {x : x_in[:,np.newaxis,:], y : y_in[:,np.newaxis,:]}
-                # label = [batch, length, channel]
-                summary, _, _= sess.run([merged, opt, train['update']], feed_dict=feed_dict)
-                writer.add_summary(summary, step)
+        merged = tf.summary.merge_all()
 
-            if step % 100 == 0:
-                prediction, loss = sess.run([train['pred'], cost], feed_dict=feed_dict)
-                print('[Step %02d] loss : %f]' % (step, loss))
-                #print('real :' , label[-1])
-                #print('pred :' , prediction[-1])
+        if do_train:
+            for step, label, data in g.get(batch_size, training_iters):
+                _ = sess.run(train['reset'])
+                for x_in, y_in in zip(data, label):
+                    feed_dict = {x : x_in[:,np.newaxis,:], y : y_in[:,np.newaxis,:]}
+                    # label = [batch, length, channel]
+                    summary, _, _= sess.run([merged, opt, train['update']], feed_dict=feed_dict)
+                    writer.add_summary(summary, step)
+
+                if step % 100 == 0:
+                    prediction, loss = sess.run([train['pred'], cost], feed_dict=feed_dict)
+                    print('[Step %02d] loss : %f]' % (step, loss))
+                    #print('real :' , label[-1])
+                    #print('pred :' , prediction[-1])
+            saver.save(sess, ckpt_path)
 
         ##  SAVE  ##
         output_graph_def = graph_util.convert_variables_to_constants(
@@ -154,23 +165,45 @@ def main():
         ############
 
         ## TESTING ##
-        w,h = 512,512
-        frame = np.zeros((h,w,3), dtype=np.uint8)
+        if do_test:
+            w,h = 512,512
+            frame = np.zeros((h,w,3), dtype=np.uint8)
 
-        for step, label, data in g.get(1, testing_iters):
-            frame.fill(0)
-            _ = sess.run(test['reset'])
-            for x_in, y_in in zip(data, label):
-                feed_dict = {x : x_in[:, np.newaxis,:], y : y_in[:, np.newaxis, :]}
-                pred, _ = sess.run([test['pred'], test['update']], feed_dict=feed_dict)
+            for step, label, data in g.get(1, testing_iters):
+                frame.fill(0)
+                _ = sess.run(test['reset'])
 
-                x_in, y_in, pred = [(np.squeeze(e) * [h/2,w/2] + [h/2,w/2]).astype(np.int32) for e in (x_in, y_in, pred)]
+                prvx = None
+                prvy = None
+                prvp = None
 
-                cv2.circle(frame, (y_in[1],y_in[0]), 10, (255,0,0), thickness=-1) # --> true pos, blue
-                cv2.circle(frame, (x_in[1],x_in[0]), 8, (0,255,0), thickness= 1) # --> measured pos, green
-                cv2.circle(frame, (pred[1],pred[0]), 8, (0,0,255), thickness= 1) # --> predicted pos, reg
-                cv2.imshow('frame', frame)
-                if cv2.waitKey(20) == 27:
+                for x_in, y_in in zip(data, label):
+                    feed_dict = {x : x_in[:, np.newaxis,:], y : y_in[:, np.newaxis, :]}
+                    pred, _ = sess.run([test['pred'], test['update']], feed_dict=feed_dict)
+
+                    x_in, y_in, pred = [(np.squeeze(e) * [h/2,w/2] + [h/2,w/2]).astype(np.int32) for e in (x_in, y_in, pred)]
+
+                    y_pt = (y_in[1], y_in[0])
+                    x_pt = (x_in[1], x_in[0])
+                    p_pt = (pred[1], pred[0])
+
+                    cv2.circle(frame, y_pt, 5, (255,0,0), thickness=-1) # --> true pos, blue
+                    cv2.circle(frame, x_pt, 4, (0,255,0), thickness= 1) # --> measured pos, green
+                    cv2.circle(frame, p_pt, 4, (0,0,255), thickness= 1) # --> predicted pos, reg
+
+                    if prvx is not None:
+                        cv2.line(frame, prvy, y_pt, (255,0,0), 2)
+                        cv2.line(frame, prvx, x_pt, (0,255,0), 1)
+                        cv2.line(frame, prvp, p_pt, (0,0,255), 1)
+
+                    prvy = y_pt
+                    prvx = x_pt
+                    prvp = p_pt
+
+                    cv2.imshow('frame', frame)
+                    if cv2.waitKey(20) == 27:
+                        break
+                if cv2.waitKey(0) == 27:
                     break
         #############
 

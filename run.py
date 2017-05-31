@@ -50,6 +50,8 @@ def create_graph():
     with tf.gfile.FastGFile('output_graph.pb', 'rb') as f:
         graph_def = tf.GraphDef()
         graph_def.ParseFromString(f.read())
+        for node in graph_def.node:
+            print 'op', node.op
         _ = tf.import_graph_def(graph_def, name='')
 
 
